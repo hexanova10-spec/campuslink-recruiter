@@ -27,6 +27,27 @@ import {
 } from '../server/mockData.ts';
 
 // Local reactive storage so the UI is instantaneous and always succeeds
+
+const RECRUITER_TOKEN_KEY = 'campuslink_recruiter_jwt';
+async function ensureRecruiterToken(recruiterId = 'recruiter-apex-1', companyId?: string) {
+  const existing = localStorage.getItem(RECRUITER_TOKEN_KEY);
+  if (existing) return existing;
+  const response = await fetchRecruiter('/api/recruiter/auth/dev-session', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ recruiterId, companyId })
+  });
+  if (!response.ok) throw new Error('Recruiter authentication failed');
+  const data = await response.json();
+  localStorage.setItem(RECRUITER_TOKEN_KEY, data.token);
+  return data.token;
+}
+async function fetchRecruiter(input: RequestInfo | URL, init: RequestInit = {}) {
+  const token = await ensureRecruiterToken();
+  const headers = new Headers(init.headers);
+  headers.set('Authorization', `Bearer ${token}`);
+  return fetch(input, { ...init, headers });
+}
+
 let localRecruiterId = 'recruiter-apex-1';
 let localCompanies = [...INITIAL_COMPANIES];
 let localRecruiters = [...INITIAL_RECRUITERS];
@@ -77,6 +98,7 @@ export const api = {
   // Session & Company
   async getSession() {
     try {
+      await ensureRecruiterToken(localRecruiterId);
       const res = await fetch('/api/recruiter/session');
       if (res.ok) return await res.json();
     } catch (e) {
@@ -103,6 +125,8 @@ export const api = {
 
   async switchSession(recruiterId: string) {
     try {
+      localStorage.removeItem(RECRUITER_TOKEN_KEY);
+      await ensureRecruiterToken(recruiterId);
       const res = await fetch('/api/recruiter/switch-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
